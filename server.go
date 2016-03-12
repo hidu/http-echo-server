@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -23,7 +24,7 @@ type resData struct {
 	ID      uint64 `json:"id"`
 	Request string `json:"request'`
 }
-type Datas struct{
+type Datas struct {
 	ResData []*resData
 }
 
@@ -55,7 +56,7 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 		repeat_num = 1
 	}
 
-	datas:=new(Datas)
+	datas := new(Datas)
 
 	for i := 0; i < repeat_num; i++ {
 		datas.ResData = append(datas.ResData, item)
@@ -133,4 +134,13 @@ func HelpServer(w http.ResponseWriter, req *http.Request) {
 	`
 	help = strings.Replace(help, "{host}", req.Host, -1)
 	w.Write([]byte(help))
+}
+
+func init() {
+	d := flag.Usage
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "http echo server")
+		fmt.Fprintln(os.Stderr, "site:", "https://github.com/hidu/http-echo-server\n")
+		d()
+	}
 }
