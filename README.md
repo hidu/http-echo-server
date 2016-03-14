@@ -3,6 +3,20 @@
 you can use it for test your application,such as test 404,500,403 exceptions.  
 and also network broken exception and so on.  
 
+## Install
+```
+go get -u github.com/hidu/http-echo-server
+```
+
+## Exec
+```
+http-echo-server -addr :8080
+
+```
+
+
+## Params
+
 
     http params:
     
