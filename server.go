@@ -1,9 +1,7 @@
-/**
-*for http network test
- */
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"flag"
@@ -24,13 +22,39 @@ var contentType = flag.String("content_type", "", "default response content type
 
 func main() {
 	flag.Parse()
-	http.HandleFunc("/", HelloServer)
-	http.HandleFunc("/help", HelpServer)
+	http.HandleFunc("/", index)
+	http.HandleFunc("/help", help)
+	http.HandleFunc("/status", status)
 	fmt.Println("start http server at:", *addr)
 	err := http.ListenAndServe(*addr, nil)
 
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+var helpMsg = `
+query/form params:
+	sleep        : sleep ms, eg: sleep=100
+	http_code    : http status code, eg: http_code=500
+	content_type : content type, eg: content_type=text/html;charset=utf-8
+	repeat       : repeat content times, eg: repeat=10
+	broken       : broken this connect, eg: broken=1
+	type         : data output type, allow: [json,xml], eg: type=json
+
+visit url example:
+	http://{host}/?sleep=100
+	http://{host}/?sleep=100&http_code=500&repeat=1
+	`
+
+func init() {
+	d := flag.Usage
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "http echo server")
+		d()
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "site:", "https://github.com/hidu/http-echo-server")
+		fmt.Fprintln(os.Stderr, helpMsg)
 	}
 }
 
@@ -44,7 +68,24 @@ type Datas struct {
 	ResData []*resData
 }
 
-func HelloServer(w http.ResponseWriter, req *http.Request) {
+func (d *Datas) Bytes() []byte {
+	var buf bytes.Buffer
+	for _, item := range d.ResData {
+		buf.WriteString(fmt.Sprintf("ID=%d\n\n", item.ID))
+		buf.WriteString(item.Request)
+		buf.WriteString("\n\n\n")
+	}
+	return buf.Bytes()
+}
+
+var connecting int64
+
+func index(w http.ResponseWriter, req *http.Request) {
+	atomic.AddInt64(&connecting, 1)
+	go func() {
+		<-req.Context().Done()
+		atomic.AddInt64(&connecting, -1)
+	}()
 	start := time.Now()
 
 	id := atomic.AddUint64(&reqID, 1)
@@ -110,7 +151,8 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 		reqContentType = "text/xml"
 		dataBf, _ = xml.MarshalIndent(datas, "", " ")
 	default:
-		dataBf = []byte(fmt.Sprintf("%q", datas))
+		reqContentType = "text/plain"
+		dataBf = datas.Bytes()
 	}
 
 	if *resp != "" {
@@ -137,32 +179,12 @@ func getIntVal(req *http.Request, key string) int {
 	return n
 }
 
-var helpMsg = `
-query/form params:
-	sleep        : sleep ms, eg: sleep=100
-	http_code    : http status code, eg: http_code=500
-	content_type : content type, eg: content_type=text/html;charset=utf-8
-	repeat       : repeat content times, eg: repeat=10
-	broken       : broken this connect, eg: broken=1
-	type         : data output type, allow: [json,xml], eg: type=json
-
-visit url example:
-	http://{host}/?sleep=100
-	http://{host}/?sleep=100&http_code=500&repeat=1
-	`
-
-func HelpServer(w http.ResponseWriter, req *http.Request) {
+func help(w http.ResponseWriter, req *http.Request) {
 	help := strings.Replace(helpMsg, "{host}", req.Host, -1)
 	w.Write([]byte(help))
 }
 
-func init() {
-	d := flag.Usage
-	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "http echo server")
-		d()
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "site:", "https://github.com/hidu/http-echo-server")
-		fmt.Fprintln(os.Stderr, helpMsg)
-	}
+func status(w http.ResponseWriter, req *http.Request) {
+	str := fmt.Sprintf("connecting=%d", atomic.LoadInt64(&connecting))
+	w.Write([]byte(str))
 }
