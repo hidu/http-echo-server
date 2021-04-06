@@ -25,6 +25,7 @@ func main() {
 	http.HandleFunc("/", index)
 	http.HandleFunc("/help", help)
 	http.HandleFunc("/status", status)
+	http.HandleFunc("/cal/sum", sum)
 	fmt.Println("start http server at:", *addr)
 	err := http.ListenAndServe(*addr, nil)
 
@@ -45,6 +46,7 @@ query/form params:
 visit url example:
 	http://{host}/?sleep=100
 	http://{host}/?sleep=100&http_code=500&repeat=1
+	http://{host}/cal/sum?ids=123,456
 	`
 
 func init() {
@@ -187,4 +189,52 @@ func help(w http.ResponseWriter, req *http.Request) {
 func status(w http.ResponseWriter, req *http.Request) {
 	str := fmt.Sprintf("connecting=%d", atomic.LoadInt64(&connecting))
 	w.Write([]byte(str))
+}
+
+type sumResult struct {
+	ErrNo int
+	Msg   string
+	Data  struct {
+		Sum int
+	}
+}
+
+func (sr *sumResult) Bytes() []byte {
+	bf, _ := json.Marshal(sr)
+	return bf
+}
+
+func sum(w http.ResponseWriter, req *http.Request) {
+	ids := req.URL.Query().Get("ids")
+	if ids == "" {
+		ret := &sumResult{
+			ErrNo: 400,
+			Msg:   "ids empty",
+		}
+		w.WriteHeader(400)
+		w.Write(ret.Bytes())
+		return
+	}
+	var sum int
+	for i, idStr := range strings.Split(ids, ",") {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			ret := &sumResult{
+				ErrNo: 400,
+				Msg:   fmt.Sprintf("ids[%d]=%q not int", i, idStr),
+			}
+			w.WriteHeader(400)
+			w.Write(ret.Bytes())
+			return
+		}
+		sum += id
+	}
+	ret := &sumResult{
+		ErrNo: 0,
+		Msg:   "success",
+		Data: struct{ Sum int }{
+			Sum: sum,
+		},
+	}
+	w.Write(ret.Bytes())
 }
