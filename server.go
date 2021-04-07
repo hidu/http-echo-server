@@ -19,18 +19,43 @@ import (
 var addr = flag.String("addr", ":8088", "http server listen at")
 var resp = flag.String("resp", "", "default response")
 var contentType = flag.String("content_type", "", "default response content type")
+var logHeader = flag.Bool("log_header", false, "")
 
 func main() {
 	flag.Parse()
-	http.HandleFunc("/", index)
-	http.HandleFunc("/help", help)
-	http.HandleFunc("/status", status)
-	http.HandleFunc("/cal/sum", sum)
+	http.HandleFunc("/", logRequest(index))
+	http.HandleFunc("/help", logRequest(help))
+	http.HandleFunc("/status", logRequest(status))
+	http.HandleFunc("/cal/sum", logRequest(sum))
 	fmt.Println("start http server at:", *addr)
 	err := http.ListenAndServe(*addr, nil)
 
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+func logRequest(h http.HandlerFunc) func(w http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+		num := atomic.AddInt64(&connecting, 1)
+		go func() {
+			<-req.Context().Done()
+			atomic.AddInt64(&connecting, -1)
+		}()
+
+		defer func() {
+			cost := fmt.Sprintf("%.4f", time.Now().Sub(start).Seconds()*1000)
+			fs := []interface{}{
+				num, req.RemoteAddr, req.Method, req.RequestURI, cost,
+			}
+			if *logHeader {
+				fs = append(fs, req.Header)
+			}
+			log.Println(fs...)
+		}()
+
+		h(w, req)
 	}
 }
 
@@ -83,20 +108,7 @@ func (d *Datas) Bytes() []byte {
 var connecting int64
 
 func index(w http.ResponseWriter, req *http.Request) {
-	atomic.AddInt64(&connecting, 1)
-	go func() {
-		<-req.Context().Done()
-		atomic.AddInt64(&connecting, -1)
-	}()
-	start := time.Now()
-
 	id := atomic.AddUint64(&reqID, 1)
-
-	defer func() {
-		_used := fmt.Sprintf("%.4f", time.Now().Sub(start).Seconds()*1000)
-		log.Println(id, req.Method, req.URL.RequestURI(), _used)
-	}()
-
 	item := new(resData)
 	item.ID = id
 	dump, err := httputil.DumpRequest(req, true)
