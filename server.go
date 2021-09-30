@@ -48,6 +48,7 @@ func logRequest(h http.HandlerFunc) func(w http.ResponseWriter, req *http.Reques
 			cost := fmt.Sprintf("%.4f", time.Now().Sub(start).Seconds()*1000)
 			fs := []interface{}{
 				num, req.RemoteAddr, req.Method, req.RequestURI, cost,
+				req.Context().Err(),
 			}
 			if *logHeader {
 				fs = append(fs, req.Header)
@@ -61,7 +62,8 @@ func logRequest(h http.HandlerFunc) func(w http.ResponseWriter, req *http.Reques
 
 var helpMsg = `
 query/form params:
-	sleep        : sleep ms, eg: sleep=100
+	sleep        : sleep n ms before response header, eg: sleep=100
+	sleep_ah     : sleep n ms after response header before body, eg: sleep_ah=100
 	http_code    : http status code, eg: http_code=500
 	content_type : content type, eg: content_type=text/html;charset=utf-8
 	repeat       : repeat content times, eg: repeat=10
@@ -121,7 +123,10 @@ func index(w http.ResponseWriter, req *http.Request) {
 
 	sleep := getIntVal(req, "sleep")
 	if sleep > 0 {
-		time.Sleep(time.Duration(sleep) * time.Millisecond)
+		select {
+		case <-req.Context().Done():
+		case <-time.After(time.Duration(sleep) * time.Millisecond):
+		}
 	}
 
 	httpCode := getIntVal(req, "http_code")
@@ -177,7 +182,12 @@ func index(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", reqContentType)
 	}
 
-	w.Write(dataBf)
+	w.Write(dataBf[:1])
+	sleepAh := getIntVal(req, "sleep_ah")
+	if sleepAh > 0 {
+		time.Sleep(time.Duration(sleepAh) * time.Millisecond)
+	}
+	w.Write(dataBf[1:])
 
 }
 
