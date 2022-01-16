@@ -25,6 +25,7 @@ func main() {
 	flag.Parse()
 	http.HandleFunc("/", logRequest(index))
 	http.HandleFunc("/help", logRequest(help))
+	http.HandleFunc("/chunk", logRequest(chunk))
 	http.HandleFunc("/status", logRequest(status))
 	http.HandleFunc("/cal/sum", logRequest(sum))
 	fmt.Println("start http server at:", *addr)
@@ -74,6 +75,7 @@ visit url example:
 	http://{host}/?sleep=100
 	http://{host}/?sleep=100&http_code=500&repeat=1
 	http://{host}/cal/sum?ids=123,456
+	http://{host}/chunk?&http_code=500&repeat=1
 	`
 
 func init() {
@@ -259,4 +261,22 @@ func sum(w http.ResponseWriter, req *http.Request) {
 		},
 	}
 	w.Write(ret.Bytes())
+}
+
+func chunk(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	httpCode := getIntVal(req, "http_code")
+	if httpCode > 0 {
+		w.WriteHeader(httpCode)
+	}
+	repeat := getIntVal(req, "repeat")
+	if repeat == 0 {
+		repeat = 100
+	}
+	hf := w.(http.Flusher)
+	for i := 0; i < repeat; i++ {
+		fmt.Fprintln(w, "Hello", i)
+		hf.Flush()
+		time.Sleep(time.Second)
+	}
 }
